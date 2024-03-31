@@ -3,13 +3,16 @@ import io
 import os.path
 import shutil
 import subprocess
-
+import platform
 import boto3 as boto3
 from botocore import UNSIGNED
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-WGRIB_BIN = os.path.expanduser('bin/osx/wgrib2')
+if platform.system() == 'Darwin':
+    WGRIB_BIN = os.path.expanduser('lambda/bin/osx/wgrib2')
+else:
+    WGRIB_BIN = '/usr/local/bin/wgrib2'
 
 NOAA_HRRR_BUCKET_NAME = 'noaa-hrrr-bdp-pds'
 
@@ -184,6 +187,12 @@ def download_hrrr():
     height_filter = ['10 m above ground']
     type_filter = ['UGRD', 'VGRD']
     get_most_recent_grib(work_dir, height_filter, type_filter)
+
+
+def handler(event, context):
+    print(event)
+    print(context)
+    download_hrrr()
 
 
 if __name__ == '__main__':

@@ -1,0 +1,76 @@
+# Cloud formation stack containing the
+#  S3 bucket accessible via HTTP
+# Lambda function to generate the HRRR GRB and put it in the bucket
+# SNS topic to start the lambda function when a new HRRR run is available
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: "HRRR GRIBs Host"
+
+Resources:
+  HRRRHostBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: com.gybetime.grib
+      PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+      OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  HRRRHostBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref HRRRHostBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${HRRRHostBucket}/*"
+
+  HRRRHostLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "HRRRHostLambdaPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "arn:aws:logs:*:*:*"
+              - Effect: "Allow"
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: !Sub "arn:aws:s3:::${HRRRHostBucket}/*"
+
+
+###########################################################
+## Stack Outputs
+###########################################################
+
+Outputs:
+  HRRRHostBucket:
+    Value: !Ref HRRRHostBucket
+    Description: 'Bucket to keep HRRR GRIBs'
+  LambdaExecutionRoleArn:
+    Value:
+        Fn::GetAtt:
+          - "HRRRHostLambdaRole"
+          - "Arn"
+    Description: 'The Amazon Resource Name (ARN) of the IAM role that Lambda assumes when it executes function'
