@@ -112,6 +112,19 @@ Resources:
                   - ssm:GetParametersByPath
                   - ecs:RunTask
                 Resource: "*"
+        - PolicyName: !Sub My-service-${Stage}-S3BucketPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                    - !Sub "arn:aws:s3:::${HRRRHostBucket}/*"
+                    - !Sub "arn:aws:s3:::${HRRRHostBucket}"
       Path: "/"
 
   MyServiceECSTaskExecutionRole:
@@ -143,19 +156,6 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:DescribeLogGroups
                 Resource: "*"
-        - PolicyName: !Sub My-service-${Stage}-S3BucketPolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:ListBucket
-                  - s3:DeleteObject
-                Resource:
-                    - !Sub "arn:aws:s3:::${HRRRHostBucket}/*"
-                    - !Sub "arn:aws:s3:::${HRRRHostBucket}"
       Path: "/"
 
   MyServiceCloudWatchEventRole:

@@ -1,6 +1,4 @@
 import argparse
-import os
-import zipfile
 import boto3
 from botocore.exceptions import ClientError, WaiterError
 
