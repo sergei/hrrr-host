@@ -1,0 +1,259 @@
+# Cloud formation stack containing the
+#  S3 bucket accessible via HTTP
+# Lambda function to generate the HRRR GRB and put it in the bucket
+# SNS topic to start the lambda function when a new HRRR run is available
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: "HRRR GRIBs Host"
+
+Parameters:
+  Stage:
+    Description: Stage type
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+  ContainerMemory:
+    Description: Memory for the fargate Task
+    Type: Number
+    Default: 2048
+  ContainerCpu:
+    Description: Cpu for the fargate task
+    Type: Number
+    Default: 1024
+  CloudWatchLogRetain:
+    Description: Code Build Timeout in Minutes
+    Type: Number
+    Default: 90
+    MinValue: 1
+    MaxValue: 3653
+
+
+Resources:
+
+  HRRRHostBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: com.gybetime.grib
+      PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+      OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  HRRRHostBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref HRRRHostBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${HRRRHostBucket}/*"
+
+
+  MyServiceECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "hrrr-host-repository"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:user/gribmaker"
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+
+  MyServiceECSCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Sub My-service-${Stage}-ecs-cluster
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  MyServiceECSRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub My-service-${Stage}-MyServiceECSRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: !Sub My-service-${Stage}-MyServiceECSPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeParameters
+                  - ssm:GetParametersByPath
+                  - ecs:RunTask
+                Resource: "*"
+      Path: "/"
+
+  MyServiceECSTaskExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "MyService-${Stage}-Task-ExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: !Sub My-service-${Stage}-MyServiceTaskExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:CreateLogGroup
+                  - logs:DescribeLogGroups
+                Resource: "*"
+      Path: "/"
+
+  MyServiceCloudWatchEventRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "My-${Stage}-Service-CloudWatchEventRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "events.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: !Sub My-service-${Stage}-MyServiceECSTaskExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: !Ref MyServiceEcsTaskDefinition
+        - PolicyName: !Sub My-service-${Stage}-MyServiceECSTaskExecutionIAMPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: "*"
+      Path: "/"
+    DependsOn:
+      - MyServiceEcsTaskDefinition
+
+  MyServiceEcsLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub My-service-${Stage}-task-LogsGroup
+      RetentionInDays: !Ref CloudWatchLogRetain
+
+  MyServiceEcsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Cpu: !Ref ContainerCpu
+      Memory: !Ref ContainerMemory
+      ExecutionRoleArn: !GetAtt
+        - MyServiceECSTaskExecutionRole
+        - Arn
+      Family: !Sub My-service-${Stage}-task-definition
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !GetAtt MyServiceECSRole.Arn
+      ContainerDefinitions:
+        - Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${MyServiceECRRepo}:latest"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MyServiceEcsLogsGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
+          Name: !Sub My-service-${Stage}-MyServiceTaskContainer
+          Memory: !Ref ContainerMemory
+          Cpu: !Ref ContainerCpu
+          Environment:
+            - Name: ENV
+              Value: !Ref Stage
+          PortMappings:
+            - { ContainerPort: 80 }
+    DependsOn:
+      - MyServiceECRRepo
+
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+
+  mySubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: myVPC
+      CidrBlock: 10.0.0.0/16
+
+  MyServiceScheduleRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Description: "Schedule rule for My Service"
+        Name: !Sub My-service-task-schedule-rule-${Stage}
+        State: ENABLED
+        ScheduleExpression: cron(0/45 06-18 ? * FRI *)
+        Targets:
+          - Arn: !GetAtt MyServiceECSCluster.Arn
+            Id: ScheduledTask
+            RoleArn: !GetAtt MyServiceCloudWatchEventRole.Arn
+            EcsParameters:
+              TaskDefinitionArn: !Ref MyServiceEcsTaskDefinition
+              LaunchType: FARGATE
+              NetworkConfiguration:
+                AwsVpcConfiguration:
+                  AssignPublicIp: DISABLED
+                  Subnets:
+                    - !Ref mySubnet
+
+###########################################################
+## Stack Outputs
+###########################################################
+
+Outputs:
+  HRRRHostBucket:
+    Value: !Ref HRRRHostBucket
+    Description: 'Bucket to keep HRRR GRIBs'

@@ -29,6 +29,6 @@ RUN cp grib2/wgrib2/wgrib2 /usr/local/bin/wgrib2 \
     && rm wgrib2.tgz \
     && wgrib2 -version || echo "done"
 
-COPY download_hrrr.py /usr/local/bin/download_hrrr.py
+COPY grib/download_hrrr.py /usr/local/bin/download_hrrr.py
 
 CMD ["python3", "/usr/local/bin/download_hrrr.py"]

@@ -36,7 +36,7 @@ def deploy_stack(stack_name, parameters, session=None):
             print('Trying to update stack %s  ...' % stack_name)
             stack.update(
                 TemplateBody=open(template_file, 'r').read(),
-                Capabilities=['CAPABILITY_IAM'],
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
                 Parameters=parameters,
                 UsePreviousTemplate=False
             )
@@ -46,7 +46,7 @@ def deploy_stack(stack_name, parameters, session=None):
             client.create_stack(
                 StackName=stack_name,
                 TemplateBody=open(template_file, 'r').read(),
-                Capabilities=['CAPABILITY_IAM'],
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
                 Parameters=parameters
             )
     except ClientError as e:
@@ -83,77 +83,11 @@ def deploy_stack(stack_name, parameters, session=None):
     return outputs
 
 
-def create_lambda(execution_role):
-    # ZIP the lambda folder
-    lambda_dir = 'lambda'
-    # work_dir = tempfile.mkdtemp()
-    work_dir = '/tmp'
-    zip_key = 'lambda.zip'
-    zip_file_name = work_dir + os.sep + zip_key
-    zf = zipfile.ZipFile(zip_file_name, mode='w')
-    try:
-        # Walk through the lambda folder and add all files to the zip
-        for root, directory, files in os.walk(lambda_dir):
-            for file in files:
-                if file in IGNORED_FILES:
-                    continue
-                if root in IGNORED_FILES:
-                    continue
-                file_name = os.path.join(root, file)
-                if not file_name.endswith('.pyc') and not file_name.endswith('__init__.py'):
-                    arc_name = file_name[len(lambda_dir) + 1:]
-                    zf.write(file_name, arcname=arc_name)
-                    print(f'Adding {file_name} as {arc_name}')
-    finally:
-        zf.close()
-
-    # Check if this function already exists
-    lambda_client = boto3.client('lambda')
-    print('Getting list of existing functions')
-    response = lambda_client.list_functions(
-        MaxItems=123
-    )
-    functions = response['Functions']
-    existing_function_names = []
-    for f in functions:
-        existing_function_names.append(f['FunctionName'])
-
-    lambda_name = 'download_hrrr'
-    if lambda_name in existing_function_names:
-        print(f'Function {lambda_name} already exists, updating it')
-        with open(zip_file_name, 'rb') as f:
-            lambda_client.update_function_code(
-                FunctionName=lambda_name,
-                ZipFile=f.read(),
-                Publish=True
-            )
-    else:
-        # Create the lambda function
-        print(f'Creating lambda function {lambda_name}')
-        with open(zip_file_name, 'rb') as f:
-            lambda_client.create_function(
-                FunctionName=lambda_name,
-                Runtime='python3.9',
-                Handler=lambda_name + '.handler',
-                Code={
-                    'ZipFile': f.read()
-                },
-                Role=execution_role,
-                Description='Downloads HRRR data',
-                Timeout=300,
-                MemorySize=128,
-                Publish=True
-            )
-
-
 def deploy(args):
     boto3.setup_default_session(profile_name=args.profile)
 
     parameters = []
-    out = deploy_stack('hrrr-host', parameters)
-    execution_role = out['LambdaExecutionRoleArn']
-
-    lambda_arn = create_lambda(execution_role)
+    deploy_stack('hrrr-host', parameters)
 
 
 if __name__ == '__main__':

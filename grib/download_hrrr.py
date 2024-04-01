@@ -10,7 +10,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 if platform.system() == 'Darwin':
-    WGRIB_BIN = os.path.expanduser('lambda/bin/osx/wgrib2')
+    WGRIB_BIN = os.path.expanduser('bin/osx/wgrib2')
 else:
     WGRIB_BIN = '/usr/local/bin/wgrib2'
 
