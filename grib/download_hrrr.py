@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import io
 import os.path
@@ -15,6 +16,7 @@ else:
     WGRIB_BIN = '/usr/local/bin/wgrib2'
 
 NOAA_HRRR_BUCKET_NAME = 'noaa-hrrr-bdp-pds'
+OUTPUT_GRIB_BUCKET_NAME = 'com.gybetime.grib'
 
 
 def decode_record(t):
@@ -76,7 +78,9 @@ def download_grib_slice(s3, grib_name, work_dir, height_filter, type_filter):
         if ex.response['Error']['Code'] == 'NoSuchKey':
             print(f'GRIB {grib_name} not available on the server')
         else:
-            raise
+            return None
+
+    return None
 
 
 def get_most_recent_grib(work_dir, height_filter, type_filter):
@@ -173,20 +177,29 @@ def get_most_recent_grib(work_dir, height_filter, type_filter):
         for idx, grib in enumerate(grib_list):
             print(f'Download {idx + 1} {grib}')
             small_grib = download_grib_slice(s3, grib, work_dir, height_filter, type_filter)
-            in_grib = open(small_grib, 'rb')
-            shutil.copyfileobj(in_grib, out_grib)
-            in_grib.close()
-            print(f'Removing {small_grib} ...')
-            os.unlink(small_grib)
+            if small_grib is not None:
+                in_grib = open(small_grib, 'rb')
+                shutil.copyfileobj(in_grib, out_grib)
+                in_grib.close()
+                print(f'Removing {small_grib} ...')
+                os.unlink(small_grib)
 
         print(f'{out_grib_name} created.')
+        return out_grib_name
 
 
 def download_hrrr():
     work_dir = '/tmp'
     height_filter = ['10 m above ground']
     type_filter = ['UGRD', 'VGRD']
-    get_most_recent_grib(work_dir, height_filter, type_filter)
+    grib_name = get_most_recent_grib(work_dir, height_filter, type_filter)
+
+    # Upload the GRIB file to the output bucket
+    s3 = boto3.client('s3')
+    with open(grib_name, 'rb') as f:
+        # Uploading the GRIB file to the output bucket
+        print(f'Uploading {grib_name} to s3://{OUTPUT_GRIB_BUCKET_NAME}/{os.path.basename(grib_name)} ...')
+        s3.upload_fileobj(f, OUTPUT_GRIB_BUCKET_NAME, os.path.basename(grib_name))
 
 
 def handler(event, context):
@@ -196,4 +209,8 @@ def handler(event, context):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--profile', help="AWS profile to use", required=False)
+    args = parser.parse_args()
+    boto3.setup_default_session(profile_name=args.profile)
     download_hrrr()

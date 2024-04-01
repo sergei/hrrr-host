@@ -143,6 +143,19 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:DescribeLogGroups
                 Resource: "*"
+        - PolicyName: !Sub My-service-${Stage}-S3BucketPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                Resource:
+                    - !Sub "arn:aws:s3:::${HRRRHostBucket}/*"
+                    - !Sub "arn:aws:s3:::${HRRRHostBucket}"
       Path: "/"
 
   MyServiceCloudWatchEventRole:
@@ -235,7 +248,7 @@ Resources:
         Description: "Schedule rule for My Service"
         Name: !Sub My-service-task-schedule-rule-${Stage}
         State: ENABLED
-        ScheduleExpression: cron(0/45 06-18 ? * FRI *)
+        ScheduleExpression: rate(30 minutes)
         Targets:
           - Arn: !GetAtt MyServiceECSCluster.Arn
             Id: ScheduledTask
