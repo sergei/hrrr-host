@@ -84,12 +84,15 @@ def deploy_stack(stack_name, parameters, session=None):
 def deploy(args):
     boto3.setup_default_session(profile_name=args.profile)
 
-    parameters = []
+    parameters = [
+        {'ParameterKey': 'SubnetId1', 'ParameterValue': args.subnet},
+    ]
     deploy_stack('hrrr-host', parameters)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
     parser.add_argument("--profile", help="Name of AWS profile to deploy this stack", required=True)
+    parser.add_argument("--subnet", help="Name of subnet to use", required=True)
 
     deploy(parser.parse_args())

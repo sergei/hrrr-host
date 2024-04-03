@@ -7,6 +7,12 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: "HRRR GRIBs Host"
 
 Parameters:
+  SubnetId1:
+    Description: "Id of existing subnet"
+    Type: "AWS::EC2::Subnet::Id"
+    MinLength: "1"
+    MaxLength: "255"
+    ConstraintDescription: Must be a valid Private Subnet.
   Stage:
     Description: Stage type
     Type: String
@@ -230,25 +236,13 @@ Resources:
     DependsOn:
       - MyServiceECRRepo
 
-  myVPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.0.0.0/16
-
-  mySubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId:
-        Ref: myVPC
-      CidrBlock: 10.0.0.0/16
-
   MyServiceScheduleRule:
       Type: AWS::Events::Rule
       Properties:
         Description: "Schedule rule for My Service"
         Name: !Sub My-service-task-schedule-rule-${Stage}
         State: ENABLED
-        ScheduleExpression: rate(30 minutes)
+        ScheduleExpression: rate(6 minutes)
         Targets:
           - Arn: !GetAtt MyServiceECSCluster.Arn
             Id: ScheduledTask
@@ -258,9 +252,9 @@ Resources:
               LaunchType: FARGATE
               NetworkConfiguration:
                 AwsVpcConfiguration:
-                  AssignPublicIp: DISABLED
+                  AssignPublicIp: ENABLED
                   Subnets:
-                    - !Ref mySubnet
+                    - !Ref SubnetId1
 
 ###########################################################
 ## Stack Outputs
