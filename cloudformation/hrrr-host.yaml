@@ -50,6 +50,12 @@ Resources:
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: error.html
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteContentAfter2Days
+            Status: 'Enabled'
+            ExpirationInDays: 2
+
 
   HRRRHostBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -242,7 +248,7 @@ Resources:
         Description: "Schedule rule for My Service"
         Name: !Sub My-service-task-schedule-rule-${Stage}
         State: ENABLED
-        ScheduleExpression: rate(6 minutes)
+        ScheduleExpression: rate(30 minutes)
         Targets:
           - Arn: !GetAtt MyServiceECSCluster.Arn
             Id: ScheduledTask
