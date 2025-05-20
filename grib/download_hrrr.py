@@ -20,6 +20,9 @@ REGIONS = [
     {'name': 'coastal-cup',
      'nw': {'lat': 38, 'lon': -123.3},
      'se': {'lat': 33, 'lon': -120.}},
+    {'name': 'cal-300',
+     'nw': {'lat': 35, 'lon': -122},
+     'se': {'lat': 32, 'lon': -115.}},
 ]
 
 if platform.system() == 'Darwin':
